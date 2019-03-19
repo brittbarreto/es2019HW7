@@ -1,0 +1,193 @@
+---
+title: "Toshi_HW4"
+author: "Toshiyuki Bandai"
+date: "February 27, 2019"
+output: 
+  html_document: 
+    keep_md: yes
+---
+```{r}
+#package preparation
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(data.table)
+library(stringr)
+library(readxl)
+library(ggforce)
+```
+
+
+```{r}
+#data downloading and preparation
+
+o3.filenames <- list.files("data/ca_ozone", pattern = ".txt")
+
+#change the working directory
+setwd("data/ca_ozone")
+#Load the data
+o3.filelist <- lapply(o3.filenames, read_delim, delim = "|")
+#set the name for each element in the list
+names(o3.filelist) <- gsub(".txt", "", o3.filenames)
+
+```
+
+```{r}
+daily <- o3.filelist %>%
+  rbindlist() %>%
+  group_by(site = as.factor(site), date) %>%
+  summarize(o3 = mean(obs, na.rm = TRUE))
+```
+
+><span style="color:CRIMSON;">9. How many site names in the CA air quality location dataset "Site Name" contain "San" or "Santa?".  </span>
+
+```{r}
+
+#import the data
+loc <- read_excel("data/ca_ozone/location.xls")
+
+#extract the Site Name column as a vector
+SiteNames <- pull(loc,"Site Name")
+
+#count the numbers of site containg "San" or "Santa" in thier name
+sum(str_count(SiteNames, "San|Santa"))
+
+```
+
+><span style="color:CRIMSON;">10. Identify the number of sites that do not have a complete address (full street address and zip code).  </span>
+
+Some addresses are unknow like "Address Not Known" or NA. Some addresses are incomplete like "Watt Road" for site 2044. I think full address must contain some number like "7400 Sunrise Blvd" for site 2001.
+
+```{r}
+#extract the Address column as a vector
+Address <- pull(loc,"Address")
+FullAddress <- str_subset(Address, "\\d")
+FullAddress
+```
+
+It seems like these addresses are complete address. In addition to address, check zip code. California zip code is a 5 digit number starting with 9. 
+
+```{r}
+#extract the Zip Code column as a vector
+ZipCode <- pull(loc,"Zip Code")
+
+#The number of sites that do not have a complete address
+length(Address) - sum(str_detect(Address, "\\d") & str_detect(ZipCode, "^\\d{5}"), na.rm = TRUE)
+```
+
+><span style="color:CRIMSON;">14. Write a function to calculate the ANNUAL (calendar year) mean, median, max and min of all sites that have "San" or "Santa" in their name.  </span>
+
+Before making the function, data preparation is needed.
+
+```{r}
+
+colnames(loc)[1] <- "site"
+daily.site <- daily %>%
+  left_join(loc, by = "site")
+
+#change the column name "Site Name" because this includes a space  
+colnames(daily.site)[5] <- "SiteName"
+colnames(daily.site)[11] <- "CountyName"
+#add new columns for annual mean, median, max, and min for each site.
+by_sitename_year <- daily.site %>% 
+  mutate(obs_year = year(date)) %>%
+  group_by(SiteName, obs_year) %>% 
+  summarize(mean = mean(o3), median = median(o3), max = max(o3), min = min(o3))
+
+```
+
+The function uses "ggforce" package to plot the multiple graphs.
+
+```{r}
+annual_statistic <- function(site, stats){
+  #site parameter is for a regular expression detecting sites you want. Here "San|Santa".
+  #stats parameter is for which statistical value you want among mean, median, max, and min.
+  
+  #detect sites by a regular expression assigned as a site parameter
+  selected_data <- filter(by_sitename_year, str_detect(SiteName, pattern = site))
+  
+  #prepare for plotting
+  #check the matched city number for plotting
+  city_number <- group_by(selected_data, SiteName) %>% 
+    count() %>% 
+    nrow()
+  required_pages <- ceiling(city_number / 9) # 9 graphs are shown in a page
+  
+  #plotting using ggforce 
+  if(stats == "mean"){
+  for(n in 1:required_pages){
+    plot <- ggplot(data = selected_data)+
+      geom_point(mapping = aes(x = obs_year, y = mean))+
+      facet_wrap_paginate(~SiteName, ncol=3, nrow = 3, page = n)
+    print(plot)
+  }
+  }else if(stats == "median"){
+  for(n in 1:required_pages){
+    plot <- ggplot(data = selected_data)+
+      geom_point(mapping = aes(x = obs_year, y = median))+
+      facet_wrap_paginate(~SiteName, ncol=3, nrow = 3, page = n)
+    print(plot)
+  }  
+  }else if(stats == "max"){
+  for(n in 1:required_pages){
+    plot <- ggplot(data = selected_data)+
+      geom_point(mapping = aes(x = obs_year, y = max))+
+      facet_wrap_paginate(~SiteName, ncol=3, nrow = 3, page = n)
+    print(plot)
+  }  
+  }else if(stats == "min"){
+  for(n in 1:required_pages){
+    plot <- ggplot(data = selected_data)+
+    geom_point(mapping = aes(x = obs_year, y = min))+
+      facet_wrap_paginate(~SiteName, ncol=3, nrow = 3, page = n)
+    print(plot)
+  }  
+  }else{print("stats parameter must be mean, median, max, or min.")}
+}
+
+```
+
+Use the function to obtain annual mean of ozone concentrations for all sites that have “San” or “Santa” in their name.
+
+```{r}
+annual_statistic(site = "San|Santa",stats = "mean")
+```
+
+
+><span style="color:CRIMSON;">15. Write a function to caculate the annual daily mean (what is the annual mean of the daily mean?). Apply that function to Merced County. What is the annual daily mean of o3 for Merced County? Report your results in quantititive format (i.e., prose, or a table), and in visual format (i.e., a graph). </span>
+
+Before making the function, data preparation is needed.
+
+```{r}
+by_county_day <- daily.site %>% 
+  mutate(year = year(date), month = month(date),day = mday(date)) %>%
+  group_by(CountyName, year, month, day) %>% 
+  summarize(daily_mean = mean(o3))
+
+
+#calculate annural daily mean ozone concentration
+daily_mean_by_county <- by_county_day %>% 
+  group_by(CountyName, year) %>% 
+  summarize(annual_daily_mean = mean(daily_mean))
+```
+
+
+```{r}
+annual_daily_mean_county <- function(county){
+  #detect county by a regular expression assigned in county parameter
+  selected_data <- filter(daily_mean_by_county, str_detect(CountyName, pattern = county))
+  #results in quantitive foramt
+  print(selected_data)
+  #visual format
+  plot <- ggplot(data = selected_data)+
+    geom_point(mapping = aes(x = year, y = annual_daily_mean))
+  print(plot)
+  }
+```
+
+Apply the function to Merced County
+
+```{r}
+annual_daily_mean_county("Merced")
+```
+
