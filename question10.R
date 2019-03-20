@@ -21,3 +21,11 @@ ZipCode <- pull(loc,"Zip Code")
 
 #The number of sites that do not have a complete address
 length(Address) - sum(str_detect(Address, "\\d") & str_detect(ZipCode, "^\\d{5}"), na.rm = TRUE)
+
+### This would instead filter out the incomplete addresses and physically show the ones that are complete 
+## rather than just giving a numerical answer. The string is long, however the structure
+##can be used for future string detection purposes. 
+miss_add<-str_detect(loc$Address,"\\d{1,5}\\s\\w.\\s(\\b\\w*\\b\\s){1,2}\\w*\\.")
+miss_zip<-str_detect(loc$`Zip Code`,"\\d{5}")
+Complete<- loc%>%
+  filter(Incomp.1,Incomp.Zip)
