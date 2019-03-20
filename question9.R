@@ -7,8 +7,7 @@ library(readxl)
 #import the data
 loc <- read_excel("data/ca_ozone/location.xls")
 
-#extract the Site Name column as a vector
-SiteNames <- pull(loc,"Site Name")
-
-#count the numbers of site containg "San" or "Santa" in thier name
-sum(str_count(SiteNames, "San|Santa"))
+##this is a shorter and "cleaner" version of doing searching for the patterns and
+##would allow to easily re edit the "San|Santa" for future uses.
+match<- loc %>%  
+  filter(str_detect(`Site Name`, "^(San|Santa)"))
